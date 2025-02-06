@@ -124,15 +124,21 @@ static void migrate_tasks(struct rq *dead_rq, struct rq_flags *rf)
 	/* note the clock update in orf */
 	orf.clock_update_flags |= RQCF_UPDATED;
 #endif
+
 	for (;;) {
 		/*
 		 * There's this thread running, bail when that's the only
 		 * remaining thread:
 		 */
-
-		if (rq->nr_running == 1)
+		/* When ext enabled, tasks may exist in gloal rq */
+		/*if (rq->nr_running == 1)
 			break;
+		*/
+
 		next = pick_migrate_task(rq);
+		if (next == rq->idle)
+			break;
+
 		/*
 		 * Argh ... no iterator for tasks, we need to remove the
 		 * kthread from the run-queue to continue.

@@ -918,6 +918,7 @@ struct ctl_table input_boost_sysctls[] = {
 	},
 	{ }
 };
+
 struct ctl_table walt_table[] = {
 	{
 		.procname	= "sched_user_hint",

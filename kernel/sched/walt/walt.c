@@ -15,6 +15,7 @@
 #include <linux/cpumask.h>
 #include <linux/arch_topology.h>
 #include <linux/cpu.h>
+
 #include <trace/hooks/sched.h>
 #include <trace/hooks/cpufreq.h>
 #include <trace/events/power.h>
@@ -1678,9 +1679,29 @@ static bool do_pl_notif(struct rq *rq)
 
 #define CMD_ADD		(1)
 #define CMD_SET		(2)
+#ifdef CONFIG_HMBIRD_SCHED
+static void curr_sum_fixed_set(struct walt_rq *wrq, int cmd, u64 val) {
+	if (CMD_ADD == cmd) {
+		wrq->curr_runnable_sum_fixed += val;
+	} else if (CMD_SET == cmd) {
+		wrq->curr_runnable_sum_fixed = val;
+	} else {}
+}
+
+static u64 curr_sum_fixed(struct walt_rq *wrq) {return wrq->curr_runnable_sum_fixed;}
+
+static void prev_sum_fixed_set(struct walt_rq *wrq, int cmd, u64 val) {
+	if (CMD_ADD == cmd) {
+		wrq->prev_runnable_sum_fixed += val;
+	} else if (CMD_SET == cmd) {
+		wrq->prev_runnable_sum_fixed = val;
+	} else {}
+}
+#else
 static void curr_sum_fixed_set(struct walt_rq *wrq, int cmd, u64 val) {}
 static void prev_sum_fixed_set(struct walt_rq *wrq, int cmd, u64 val) {}
 static u64 curr_sum_fixed(struct walt_rq *wrq) {return 0;}
+#endif
 
 static void rollover_cpu_window(struct rq *rq, bool full_window)
 {
@@ -4664,7 +4685,7 @@ static void walt_irq_work(struct irq_work *irq_work)
 #else
 		qcom_rearrange_pipeline_preferred_cpus(walt_scale_demand_divisor);
 #endif
-			core_ctl_check(wrq->window_start, wakeup_ctr_sum);
+		core_ctl_check(wrq->window_start, wakeup_ctr_sum);
 	}
 }
 
@@ -5077,6 +5098,7 @@ static void android_rvh_set_task_cpu(void *unused, struct task_struct *p, unsign
 		return;
 
 	migrate_busy_time_subtraction(p, (int) new_cpu);
+
 	if (!cpumask_test_cpu(new_cpu, p->cpus_ptr))
 		WALT_BUG(WALT_BUG_WALT, p, "selecting unaffined cpu=%d comm=%s(%d) affinity=0x%x",
 			 new_cpu, p->comm, p->pid, (*(cpumask_bits(p->cpus_ptr))));
@@ -5319,6 +5341,11 @@ static void android_rvh_try_to_wake_up(void *unused, struct task_struct *p)
 
 	if (unlikely(walt_disabled))
 		return;
+
+#ifdef CONFIG_HMBIRD_SCHED
+	if (walt_ops && walt_ops->scx_enable && walt_ops->scx_enable())
+		return;
+#endif
 
 	rq_lock_irqsave(rq, &rf);
 	/* bug: 7632324, see commit 579ac04dfe82b2b013d1d6444a3baaee9e263c5e
